@@ -284,77 +284,20 @@ mod app {
         )
     }
 
-    /*
-    fn read_exp(ioe: &mut IoE, index: u8) -> u16 {
-        // read some port data to clear possible interrupt state
-        let epins = ioe.split();
-        let arr_epins: [&port_expander_multi::Pin<mode::Input, PortExpInner>; 16] = [
-            &epins.io0a_0,
-            &epins.io0a_1,
-            &epins.io0a_2,
-            &epins.io0a_3,
-            &epins.io0a_4,
-            &epins.io0a_5,
-            &epins.io0a_6,
-            &epins.io0a_7,
-            &epins.io0b_0,
-            &epins.io0b_1,
-            &epins.io0b_2,
-            &epins.io0b_3,
-            &epins.io0b_4,
-            &epins.io0b_5,
-            &epins.io0b_6,
-            &epins.io0b_7,
-        ];
-        let bits = read_multiple(index, arr_epins).unwrap();
-        let mut ret = 0;
-        (0u16..=15)
-            .map(|i| (bits[i as usize] as u16) << i)
-            .for_each(|b| ret |= b);
-        ret
-    }
-
-    fn write_exp(ioe: &mut IoE, bits: u16) {
-        let epins = ioe.split();
-        let arr_epins = [
-            &mut epins.io0_0.into_output().unwrap(),
-            &mut epins.io0_1.into_output().unwrap(),
-            &mut epins.io0_2.into_output().unwrap(),
-            &mut epins.io0_3.into_output().unwrap(),
-            &mut epins.io0_4.into_output().unwrap(),
-            &mut epins.io0_5.into_output().unwrap(),
-            &mut epins.io0_6.into_output().unwrap(),
-            &mut epins.io0_7.into_output().unwrap(),
-            &mut epins.io1_0.into_output().unwrap(),
-            &mut epins.io1_1.into_output().unwrap(),
-            &mut epins.io1_2.into_output().unwrap(),
-            &mut epins.io1_3.into_output().unwrap(),
-            &mut epins.io1_4.into_output().unwrap(),
-            &mut epins.io1_5.into_output().unwrap(),
-            &mut epins.io1_6.into_output().unwrap(),
-            &mut epins.io1_7.into_output().unwrap(),
-        ];
-
-        let mut arr_bits = [false; 16];
-        (0u16..=15)
-            .map(|i| (i, bits & (1 << i) != 0))
-            .for_each(|b| arr_bits[b.0 as usize] = b.1);
-        write_multiple(arr_epins, arr_bits).unwrap();
-    }
-    */
-
     // Task with least priority that only runs when nothing else is running.
     #[idle(local = [x: u32 = 0])]
     fn idle(cx: idle::Context) -> ! {
         loop {
             *cx.local.x += 1;
-            // cortex_m::asm::wfe();
+            cortex_m::asm::wfe();
         }
     }
 
     #[task(priority = 1, capacity = 4, shared = [bits, rise, fall, serial])]
     fn io_report(cx: io_report::Context) {
         let mut buf = [0u8; 320];
+        let mut change0 = false;
+        let mut change1 = false;
 
         let io_report::SharedResources {
             bits,
@@ -362,41 +305,60 @@ mod app {
             fall,
             serial,
         } = cx.shared;
+
         (bits, rise, fall).lock(|_bits_a, rise_a, fall_a| {
+            (0..=3).for_each(|i| {
+                if rise_a[i] != 0 || fall_a[i] != 0 {
+                    change0 = true;
+                }
+            });
+            (4..=7).for_each(|i| {
+                if rise_a[i] != 0 || fall_a[i] != 0 {
+                    change1 = true;
+                }
+            });
+
             let mut w = Wrapper::new(&mut buf);
-            writeln!(
-                w,
-                "Rise0: {:#016b} {:#016b} {:#016b} {:#016b}\r",
-                rise_a[0], rise_a[1], rise_a[2], rise_a[3]
-            )
-            .ok();
-            writeln!(
-                w,
-                "Rise1: {:#016b} {:#016b} {:#016b} {:#016b}\r",
-                rise_a[4], rise_a[5], rise_a[6], rise_a[7]
-            )
-            .ok();
-            writeln!(
-                w,
-                "Fall0: {:#016b} {:#016b} {:#016b} {:#016b}\r",
-                fall_a[0], fall_a[1], fall_a[2], fall_a[3]
-            )
-            .ok();
-            writeln!(
-                w,
-                "Ball1: {:#016b} {:#016b} {:#016b} {:#016b}\r",
-                fall_a[4], fall_a[5], fall_a[6], fall_a[7]
-            )
-            .ok();
+            if change0 {
+                writeln!(
+                    w,
+                    "Rise0: {:016b} {:016b} {:016b} {:016b}\r",
+                    rise_a[0], rise_a[1], rise_a[2], rise_a[3]
+                )
+                .ok();
+                writeln!(
+                    w,
+                    "Fall0: {:016b} {:016b} {:016b} {:016b}\r\n\r",
+                    fall_a[0], fall_a[1], fall_a[2], fall_a[3]
+                )
+                .ok();
+            }
+            if change1 {
+                writeln!(
+                    w,
+                    "Rise1: {:016b} {:016b} {:016b} {:016b}\r",
+                    rise_a[4], rise_a[5], rise_a[6], rise_a[7]
+                )
+                .ok();
+                writeln!(
+                    w,
+                    "Fall1: {:016b} {:016b} {:016b} {:016b}\r\n\r",
+                    fall_a[4], fall_a[5], fall_a[6], fall_a[7]
+                )
+                .ok();
+            }
             /*
-            let o = w.offset;
-            writeln!(w, "{}\r", o).ok();
+            if change0 || change1 {
+                let o = w.offset;
+                writeln!(w, "{}\r", o).ok();
+            }
             */
-            writeln!(w, "\r").ok();
         });
-        (serial,).lock(|s| {
-            write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
-        });
+        if buf.len() > 0 {
+            (serial,).lock(|s| {
+                write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
+            });
+        }
     }
 
     #[task(priority = 1, capacity = 4, shared = [ioe, bits, rise, fall])]
@@ -445,8 +407,8 @@ mod app {
         let test_output::SharedResources { ioe } = cx.shared;
         let test_output::LocalResources { init, index, bit } = cx.local;
 
-        let data1 = 1u16 << *bit;
-        let data2 = 0x8000u16 >> *bit;
+        let data0 = !(1u16 << *bit);
+        let data1 = !(0x8000u16 >> *bit);
         (ioe,).lock(|ioe_a| {
             if *init {
                 (0u8..=7).for_each(|i| {
@@ -457,17 +419,15 @@ mod app {
                 *init = false;
             }
 
-            // let foo = ioe_a.0.lock().read_u16();
-            // write_exp(ioe_a, data);
             ioe_a.0.lock(|drv| {
-                drv.write_u16(0, data1).ok();
-                drv.write_u16(1, data2).ok();
-                drv.write_u16(2, data1).ok();
-                drv.write_u16(3, data2).ok();
-                drv.write_u16(4, data1).ok();
-                drv.write_u16(5, data2).ok();
-                drv.write_u16(6, data1).ok();
-                drv.write_u16(7, data2).ok();
+                drv.write_u16(0, data0).ok();
+                drv.write_u16(1, data1).ok();
+                drv.write_u16(2, data0).ok();
+                drv.write_u16(3, data1).ok();
+                drv.write_u16(4, data0).ok();
+                drv.write_u16(5, data1).ok();
+                drv.write_u16(6, data0).ok();
+                drv.write_u16(7, data1).ok();
             });
         });
 

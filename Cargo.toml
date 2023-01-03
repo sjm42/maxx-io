@@ -39,8 +39,8 @@ usbd-hid = "0.6"
 shared-bus = { version = "0.2", features = ["cortex-m"] }
 # shared-bus = { git = "https://github.com/Rahix/shared-bus.git", features = ["cortex-m", "eh-alpha"] }
 
-# port-expander = { git = "https://github.com/sjm42/port-expander-multi.git" }
-port-expander-multi = { path = "../../00test/port-expander-multi" }
+port-expander-multi = { git = "https://github.com/sjm42/port-expander-multi.git" }
+# port-expander-multi = { path = "../../00test/port-expander-multi" }
 
 
 [dev-dependencies]

@@ -562,6 +562,7 @@ dependencies = [
 [[package]]
 name = "port-expander-multi"
 version = "0.3.1"
+source = "git+https://github.com/sjm42/port-expander-multi.git#ca2770c0a8f8778ac010b675cd407bdab038b57e"
 dependencies = [
  "embedded-hal",
  "shared-bus",
