@@ -1,0 +1,5 @@
+{
+    "rust.target": "thumbv6m-none-eabi",
+    "rust.all_targets": false,
+    "rust-analyzer.checkOnSave.allTargets": false
+}
