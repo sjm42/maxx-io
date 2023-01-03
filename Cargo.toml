@@ -3,7 +3,7 @@ authors = ["sjm"]
 edition = "2021"
 readme = "README.md"
 name = "maxx_io"
-version = "0.1.0"
+version = "0.1.1"
 resolver = "2"
 
 
@@ -21,7 +21,7 @@ futures = { version = "0.3", default-features = false, optional = true }
 panic-halt = "0.2"
 # panic-probe = { version = "0.3", features = ["print-defmt"] }
 rp-pico = "0.6"
-rp2040-boot2 = { version = "0.2", optional = true }
+rp2040-boot2 = { version = "0.2" }
 # rp2040-hal = { version = "0.7", features = ["rt", "eh1_0_alpha "] }
 # rp2040-hal = { git = "https://github.com/rp-rs/rp-hal.git", features = ["rt","eh1_0_alpha "] }
 # rp2040-hal = { path = "../../00test/rp-hal", features = ["rt", "eh1_0_alpha "] }
@@ -29,12 +29,6 @@ systick-monotonic = "1.0"
 usb-device = "0.2"
 usbd-serial = "0.1"
 usbd-hid = "0.6"
-
-# eh_a9 = { package = "embedded-hal", version = "=1.0.0-alpha.9", features = [] }
-# pca9535 = "1.1"
-# pca9535 = { git = "https://github.com/TeyKey1/pca9535.git" }
-# pca9535 = { git = "https://github.com/sjm42/pca9535.git" }
-# pca9535_multi = { path = "../../00test/pca9535_multi" }
 
 shared-bus = { version = "0.2", features = ["cortex-m"] }
 # shared-bus = { git = "https://github.com/Rahix/shared-bus.git", features = ["cortex-m", "eh-alpha"] }

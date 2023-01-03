@@ -239,27 +239,29 @@ mod app {
         );
         let ioe = port_expander_multi::Pca9555::new_m(i2c);
 
-        let mut bits = [0; 8];
+        let bits = [0; 8];
         let rise = [0; 8];
         let fall = [0; 8];
+        /*
         (0..=7).for_each(|i| {
             ioe.0.lock(|drv| {
                 drv.set_direction(i, 0xFFFF, Direction::Input, false).ok();
                 bits[i as usize] = drv.read_u16(i).unwrap();
             })
         });
+        */
 
         // Deliver the interrupt from PCA9555s into gpio20
         let sw_pin = pins.gpio20.into_pull_up_input();
 
         let mut timer = hal::Timer::new(dp.TIMER, &mut resets);
         let mut alarm = timer.alarm_0().unwrap();
-        let _ = alarm.schedule(SCAN_TIME_US.micros());
+        alarm.schedule(SCAN_TIME_US.micros()).ok();
         alarm.enable_interrupt();
 
+        test_input::spawn_after(5000u64.millis()).ok();
+        // test_output::spawn_after(1000u64.millis()).ok();
         // test_in_out::spawn_after(1000u64.millis()).ok();
-        // test_input::spawn_after(1000u64.millis()).ok();
-        test_output::spawn_after(1000u64.millis()).ok();
 
         //********
         // Return the Shared variables struct, the Local variables struct and the XPTO Monitonics
@@ -292,7 +294,7 @@ mod app {
     fn idle(cx: idle::Context) -> ! {
         loop {
             *cx.local.x += 1;
-            cortex_m::asm::wfe();
+            // cortex_m::asm::wfe();
         }
     }
 
@@ -362,6 +364,7 @@ mod app {
                 write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
             });
         }
+        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, capacity = 4, shared = [ioe, bits, rise, fall, zpend])]
@@ -385,6 +388,7 @@ mod app {
             });
 
             // Indicate input findings on the last 2 chips outputs
+            /*
             let mut out = 0;
             (0..=5).for_each(|i| {
                 let b = rise_a[i];
@@ -401,15 +405,17 @@ mod app {
                     ioe_a.0.lock(|drv| drv.write_u16(i, out).unwrap());
                 });
             }
+            */
         });
 
         // only have one spawn pending
         (zpend,).lock(|zpend_a| {
             if !*zpend_a {
                 *zpend_a = true;
-                out_zero::spawn_after(1000u64.millis()).ok();
+                // out_zero::spawn_after(1000u64.millis()).ok();
             }
         });
+
         io_report::spawn().ok();
     }
 
@@ -433,6 +439,7 @@ mod app {
         (zpend,).lock(|zpend_a| {
             *zpend_a = false;
         });
+        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, shared = [ioe, bits])]
@@ -451,7 +458,6 @@ mod app {
             });
         });
         enable_irq::spawn().ok();
-        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, shared = [ioe, bits])]
@@ -475,7 +481,6 @@ mod app {
             });
         });
         enable_irq::spawn().ok();
-        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, shared = [ioe], local = [init: bool = true, index: u8 = 0, bit: u8 = 0])]
@@ -547,6 +552,7 @@ mod app {
 
         enable_irq::spawn_after(100u64.millis()).ok();
         io_poll::spawn().ok();
+
         // cortex_m::asm::sev();
     }
 
@@ -612,7 +618,6 @@ mod app {
         serial.lock(|s| {
             write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
         });
-
         // cortex_m::asm::sev();
     }
 
@@ -654,7 +659,6 @@ mod app {
                 }
             },
         );
-
         // cortex_m::asm::sev();
     }
 
