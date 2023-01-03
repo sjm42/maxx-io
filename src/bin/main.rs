@@ -148,6 +148,7 @@ mod app {
         bits: [u16; 8],
         rise: [u16; 8],
         fall: [u16; 8],
+        zpend: bool,
     }
 
     #[monotonic(binds = SysTick, default = true)]
@@ -241,7 +242,7 @@ mod app {
         let mut bits = [0; 8];
         let rise = [0; 8];
         let fall = [0; 8];
-        (0u8..=7).for_each(|i| {
+        (0..=7).for_each(|i| {
             ioe.0.lock(|drv| {
                 drv.set_direction(i, 0xFFFF, Direction::Input, false).ok();
                 bits[i as usize] = drv.read_u16(i).unwrap();
@@ -256,8 +257,9 @@ mod app {
         let _ = alarm.schedule(SCAN_TIME_US.micros());
         alarm.enable_interrupt();
 
-        // test_output::spawn_after(1000u64.millis()).ok();
-        test_input::spawn_after(1000u64.millis()).ok();
+        // test_in_out::spawn_after(1000u64.millis()).ok();
+        // test_input::spawn_after(1000u64.millis()).ok();
+        test_output::spawn_after(1000u64.millis()).ok();
 
         //********
         // Return the Shared variables struct, the Local variables struct and the XPTO Monitonics
@@ -278,6 +280,7 @@ mod app {
                 bits,
                 rise,
                 fall,
+                zpend: false,
             },
             Local {},
             init::Monotonics(mono),
@@ -354,52 +357,125 @@ mod app {
             }
             */
         });
-        if buf.len() > 0 {
+        if !buf.is_empty() {
             (serial,).lock(|s| {
                 write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
             });
         }
     }
 
-    #[task(priority = 1, capacity = 4, shared = [ioe, bits, rise, fall])]
+    #[task(priority = 1, capacity = 4, shared = [ioe, bits, rise, fall, zpend])]
     fn io_poll(cx: io_poll::Context) {
         let io_poll::SharedResources {
             ioe,
             bits,
             rise,
             fall,
+            zpend,
         } = cx.shared;
         (ioe, bits, rise, fall).lock(|ioe_a, bits_a, rise_a, fall_a| {
-            (0u8..=7).for_each(|i| {
+            (0..=7).for_each(|i| {
                 ioe_a.0.lock(|drv| {
                     let before = bits_a[i as usize];
                     let after = drv.read_u16(i).unwrap();
                     rise_a[i as usize] = !before & after;
                     fall_a[i as usize] = before & !after;
                     bits_a[i as usize] = after;
-                })
+                });
             });
+
+            // Indicate input findings on the last 2 chips outputs
+            let mut out = 0;
+            (0..=5).for_each(|i| {
+                let b = rise_a[i];
+                if b != 0 {
+                    out = if b & 0xFF00 != 0 {
+                        b & 0xFF00 | b >> 8
+                    } else {
+                        b << 8 | b & 0x00FF
+                    };
+                }
+            });
+            if out != 0 {
+                (6..=7).for_each(|i| {
+                    ioe_a.0.lock(|drv| drv.write_u16(i, out).unwrap());
+                });
+            }
+        });
+
+        // only have one spawn pending
+        (zpend,).lock(|zpend_a| {
+            if !*zpend_a {
+                *zpend_a = true;
+                out_zero::spawn_after(1000u64.millis()).ok();
+            }
         });
         io_report::spawn().ok();
+    }
+
+    #[task(priority = 1, capacity = 4, shared = [ioe, bits, rise, fall, zpend])]
+    fn out_zero(cx: out_zero::Context) {
+        let out_zero::SharedResources {
+            ioe,
+            bits,
+            rise,
+            fall,
+            zpend,
+        } = cx.shared;
+        (ioe, bits, rise, fall).lock(|ioe_a, bits_a, rise_a, fall_a| {
+            (6..=7).for_each(|i| {
+                ioe_a.0.lock(|drv| drv.write_u16(i as u8, 0).unwrap());
+                bits_a[i] = 0;
+                rise_a[i] = 0;
+                fall_a[i] = 0;
+            });
+        });
+        (zpend,).lock(|zpend_a| {
+            *zpend_a = false;
+        });
     }
 
     #[task(priority = 1, shared = [ioe, bits])]
     fn test_input(cx: test_input::Context) {
         let test_input::SharedResources { ioe, bits } = cx.shared;
         (ioe, bits).lock(|ioe_a, bits_a| {
-            (0u8..=7).for_each(|i| {
+            (0..=7).for_each(|i| {
                 ioe_a.0.lock(|drv| {
                     drv.set_direction(i, 0xFFFF, Direction::Input, false).ok();
                 })
             });
-            (0u8..=7).for_each(|i| {
+            (0..=7).for_each(|i| {
                 ioe_a.0.lock(|drv| {
                     bits_a[i as usize] = drv.read_u16(i).unwrap();
                 })
             });
         });
         enable_irq::spawn().ok();
-        cortex_m::asm::sev();
+        // cortex_m::asm::sev();
+    }
+
+    #[task(priority = 1, shared = [ioe, bits])]
+    fn test_in_out(cx: test_in_out::Context) {
+        let test_in_out::SharedResources { ioe, bits } = cx.shared;
+        (ioe, bits).lock(|ioe_a, bits_a| {
+            (0..=5).for_each(|i| {
+                ioe_a.0.lock(|drv| {
+                    drv.set_direction(i, 0xFFFF, Direction::Input, false).ok();
+                })
+            });
+            (6..=7).for_each(|i| {
+                ioe_a.0.lock(|drv| {
+                    drv.set_direction(i, 0xFFFF, Direction::Output, false).ok();
+                })
+            });
+            (0..=7).for_each(|i| {
+                ioe_a.0.lock(|drv| {
+                    bits_a[i as usize] = drv.read_u16(i).unwrap();
+                })
+            });
+        });
+        enable_irq::spawn().ok();
+        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, shared = [ioe], local = [init: bool = true, index: u8 = 0, bit: u8 = 0])]
@@ -411,7 +487,7 @@ mod app {
         let data1 = !(0x8000u16 >> *bit);
         (ioe,).lock(|ioe_a| {
             if *init {
-                (0u8..=7).for_each(|i| {
+                (0..=7).for_each(|i| {
                     ioe_a.0.lock(|drv| {
                         drv.set_direction(i, 0xFFFF, Direction::Output, false).ok();
                     })
@@ -442,7 +518,7 @@ mod app {
         }
 
         test_output::spawn_after(200u64.millis()).ok();
-        cortex_m::asm::sev();
+        // cortex_m::asm::sev();
     }
 
     #[task(priority = 1, capacity = 2, shared = [sw_pin])]
@@ -452,7 +528,7 @@ mod app {
             sw_pin_a.clear_interrupt(hal::gpio::Interrupt::LevelLow);
             sw_pin_a.set_interrupt_enabled(hal::gpio::Interrupt::LevelLow, true);
         });
-        cortex_m::asm::sev();
+        // cortex_m::asm::sev();
     }
 
     #[task(
@@ -471,7 +547,7 @@ mod app {
 
         enable_irq::spawn_after(100u64.millis()).ok();
         io_poll::spawn().ok();
-        cortex_m::asm::sev();
+        // cortex_m::asm::sev();
     }
 
     // Task that blinks the rp-pico onboard LED and that send a message "LED ON!" and "LED OFF!" do USB-Serial.
