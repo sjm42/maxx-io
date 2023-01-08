@@ -389,6 +389,50 @@ mod app {
         }
     }
 
+    fn which_bit(bits: &[u16; 8]) -> (u8, u8) {
+        for chip in 0..=7 {
+            let input_bits = bits[chip as usize];
+            for bit in 0..=15 {
+                if input_bits & (1 << bit) != 0 {
+                    return (chip, bit as u8);
+                }
+            }
+        }
+        (0, 0)
+    }
+
+    #[task(priority = 1, capacity = 4, shared = [fall, irqc, serial])]
+    fn input_id(cx: input_id::Context) {
+        let mut buf = [0u8; 64];
+        let mut change0 = false;
+
+        let input_id::SharedResources { fall, irqc, serial } = cx.shared;
+
+        (fall, irqc).lock(|fall_a, irqc_a| {
+            (0..=7).for_each(|i| {
+                if fall_a[i] != 0 {
+                    change0 = true;
+                }
+            });
+            if change0 {
+                let mut w = Wrapper::new(&mut buf);
+                let (index, bit) = which_bit(fall_a);
+                writeln!(
+                    w,
+                    "Input: chip {index} bit {bit} (irq count: {})\r\n\r",
+                    *irqc_a
+                )
+                .ok();
+            }
+        });
+
+        if !buf.is_empty() {
+            (serial,).lock(|s| {
+                write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, true);
+            });
+        }
+    }
+
     #[task(priority = 1, capacity = 4, shared = [ioe0, fall, zpend])]
     fn in_to_out(cx: in_to_out::Context) {
         let in_to_out::SharedResources { ioe0, fall, zpend } = cx.shared;
@@ -457,8 +501,9 @@ mod app {
             });
         });
 
-        io_report::spawn().ok();
         in_to_out::spawn().ok();
+        io_report::spawn().ok();
+        input_id::spawn().ok();
     }
 
     #[task(priority = 1, shared = [ioe0], local = [init: bool = true, index: u8 = 0, bit: u8 = 0])]
