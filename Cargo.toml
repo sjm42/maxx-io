@@ -3,12 +3,21 @@ authors = ["sjm"]
 edition = "2021"
 readme = "README.md"
 name = "maxx_io"
-version = "0.2.1"
+version = "0.2.3"
 resolver = "2"
 
 
-[dependencies]
+[features]
+default = ["ioe0", "ioe1", "io_report", "input_id", "test_output"]
+ioe0 = []
+ioe1 = []
+io_report = []
+input_id = []
+test_output = []
+in_to_out = []
 
+
+[dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-rtic = "1.1"
