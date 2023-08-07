@@ -3,7 +3,7 @@ authors = ["sjm"]
 edition = "2021"
 readme = "README.md"
 name = "maxx_io"
-version = "0.2.3"
+version = "0.2.4"
 resolver = "2"
 
 
