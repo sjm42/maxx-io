@@ -220,6 +220,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 
 [[package]]
+name = "embedded-dma"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "994f7e5b5cb23521c22304927195f236813053eb9c065dd2226a32ba64695446"
+dependencies = [
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -421,7 +430,7 @@ dependencies = [
  "panic-halt",
  "port-expander-multi",
  "rp-pico",
- "rp2040-boot2",
+ "rp2040-boot2 0.3.0",
  "shared-bus",
  "systick-monotonic",
  "usb-device",
@@ -621,14 +630,14 @@ checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 
 [[package]]
 name = "rp-pico"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39292e9f7c6b9eb32e0f95e0b89ecdca896df90f874172e163e43532481c059c"
+checksum = "aab28f6f4e19cec2d61b64cdd685e69794b81c579fd3b765579c46018fe616d0"
 dependencies = [
  "cortex-m 0.7.7",
  "cortex-m-rt",
  "fugit",
- "rp2040-boot2",
+ "rp2040-boot2 0.2.1",
  "rp2040-hal",
  "usb-device",
 ]
@@ -643,13 +652,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "rp2040-hal"
-version = "0.7.0"
+name = "rp2040-boot2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ecf1b975581f0cac465247c464e7d2b8d93c7a5fceb4eb13b7b8517f4f85f6d"
+checksum = "7c92f344f63f950ee36cf4080050e4dce850839b9175da38f9d2ffb69b4dbb21"
+dependencies = [
+ "crc-any",
+]
+
+[[package]]
+name = "rp2040-hal"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1369bb84862d7f69391a96606b2f29a00bfce7f29a749e23d5f01fc3f607ada0"
 dependencies = [
  "cortex-m 0.7.7",
  "critical-section",
+ "embedded-dma",
  "embedded-hal",
  "fugit",
  "itertools",

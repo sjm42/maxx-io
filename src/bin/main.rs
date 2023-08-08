@@ -1,11 +1,10 @@
 // main.rs
-
+#![no_std]
+#![no_main]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 #![allow(unused_variables)]
-#![no_std]
-#![no_main]
 
 use defmt_rtt as _;
 use panic_halt as _;
@@ -257,7 +256,7 @@ mod app {
 
         enable_io_irq::spawn_after(1000u64.millis()).ok();
 
-        #[cfg(feature = "ioe0")]
+        #[cfg(all(feature = "ioe0", feature = "test_output"))]
         test_output::spawn_after(2000u64.millis()).ok();
 
         //********
@@ -514,8 +513,11 @@ mod app {
                 init, index, bit, ..
             } = cx.local;
 
+            /*
             let data0 = !(1u16 << *bit);
             let data1 = !(0x8000u16 >> *bit);
+            */
+
             (ioe0,).lock(|ioe0_a| {
                 let ioe0 = ioe0_a.as_ref().unwrap();
                 if *init {
@@ -526,7 +528,13 @@ mod app {
                     });
                     *init = false;
                 }
+                ioe0.0.lock(|drv| {
+                    (0..=7).for_each(|i| {
+                        drv.write_u16(1, 0xffff).ok();
+                    })
+                });
 
+                /*
                 ioe0.0.lock(|drv| {
                     drv.write_u16(0, data0).ok();
                     drv.write_u16(1, data1).ok();
@@ -537,8 +545,10 @@ mod app {
                     drv.write_u16(6, data0).ok();
                     drv.write_u16(7, data1).ok();
                 });
+                 */
             });
 
+            /*
             if *bit < 15 {
                 *bit += 1;
             } else {
@@ -550,6 +560,7 @@ mod app {
             }
 
             test_output::spawn_after(500u64.millis()).ok();
+            */
         }
     }
 
