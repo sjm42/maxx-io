@@ -1,12 +1,7 @@
 {
-    "rust.target": "thumbv6m-none-eabi",
-    "rust.all_targets": false,
-    "rust-analyzer.cargo-watch.arguments": [
-        "--target",
-        "thumbv6m-none-eabi"
-    ],
-    "rust-analyzer.checkOnSave.allTargets": false,
-    "rust-analyzer.checkOnSave.extraArgs": [
+    "rust-analyzer.cargo.target": "thumbv6m-none-eabi",
+    "rust-analyzer.check.allTargets": false,
+    "rust-analyzer.check.extraArgs": [
         "--target",
         "thumbv6m-none-eabi"
     ],
