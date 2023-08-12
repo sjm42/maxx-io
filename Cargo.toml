@@ -39,6 +39,7 @@ fugit = "0.3"
 futures = { version = "0.3", default-features = false, optional = true }
 panic-halt = "0.2"
 # panic-probe = { version = "0.3", features = ["print-defmt"] }
+rand = { version = "0.8", default-features = false, features = ["std_rng"] }
 rp-pico = "0.7"
 rp2040-boot2 = { version = "0.3" }
 # rp2040-hal = { version = "0.7", features = ["rt", "eh1_0_alpha "] }

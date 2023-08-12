@@ -1,18 +1,21 @@
 // main.rs
+
 #![no_std]
 #![no_main]
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_mut)]
-#![allow(unused_variables)]
+
+// #![allow(dead_code)]
+// #![allow(unused_imports)]
+// #![allow(unused_mut)]
+// #![allow(unused_variables)]
 
 use defmt_rtt as _;
 use panic_halt as _;
 
-use core::fmt::{self, Write};
+use core::fmt::Write;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::*;
 use port_expander_multi::{dev::pca9555::Driver, Direction, PortDriver, PortDriverTotemPole};
+use rand::{prelude::*, SeedableRng};
 use rp_pico::hal::{
     self,
     gpio::{bank0::*, Function},
@@ -112,8 +115,7 @@ mod app {
         fall: [u16; 8],
         output: [u16; 8],
         tstate: OutTestState,
-        zpend: bool,
-        iopend: bool,
+        rng: Option<StdRng>,
     }
 
     #[monotonic(binds = SysTick, default = true)]
@@ -264,12 +266,9 @@ mod app {
         let sw_pin = pins.gpio20.into_pull_up_input();
 
         let mut timer = hal::Timer::new(dp.TIMER, &mut resets);
-        let mut alarm = timer.alarm_0().unwrap();
-
-        /*
-        alarm.schedule(SCAN_TIME_US.micros()).ok();
-        alarm.enable_interrupt();
-        */
+        let alarm = timer.alarm_0().unwrap();
+        // alarm.schedule(SCAN_TIME_US.micros()).ok();
+        // alarm.enable_interrupt();
 
         #[cfg(all(feature = "ioe0", feature = "test_output"))]
         test_output::spawn_after(1_000u64.millis()).ok();
@@ -306,8 +305,7 @@ mod app {
                 fall,
                 output,
                 tstate: OutTestState::Test1,
-                zpend: false,
-                iopend: false,
+                rng: None,
             },
             Local {},
             init::Monotonics(mono),
@@ -344,7 +342,7 @@ mod app {
         let mut buf = [0u8; 64];
 
         let alive::SharedResources {
-            mut serial,
+            serial,
             counter,
             irqc,
             sw_pin,
@@ -475,23 +473,15 @@ mod app {
         }
     }
 
-    #[task(priority = 1, capacity = 4, shared = [ioe0, ioe1, fall, serial, zpend])]
+    #[task(priority = 1, capacity = 4, shared = [fall, serial])]
     fn in_to_out(cx: in_to_out::Context) {
         #[cfg(all(feature = "ioe0", feature = "ioe1", feature = "in_to_out"))]
         {
-            let in_to_out::SharedResources {
-                ioe0,
-                ioe1,
-                fall,
-                zpend,
-                serial,
-                ..
-            } = cx.shared;
+            let in_to_out::SharedResources { fall, serial, .. } = cx.shared;
             let mut fall0 = false;
             let mut buf = [0u8; 100];
 
-            (ioe0, ioe1, fall).lock(|ioe0_a, ioe1_a, fall_a| {
-                let ioe0 = ioe0_a.as_ref().unwrap();
+            (fall,).lock(|fall_a| {
                 (0..=7).for_each(|i| {
                     if fall_a[i] != 0 {
                         fall0 = true;
@@ -517,7 +507,6 @@ mod app {
                             write_serial(s, unsafe { core::str::from_utf8_unchecked(&buf) }, false);
                         });
 
-                        // ioe0.0.lock(|drv| drv.write_u16(chip, out).ok());
                         set_output::spawn(pin.clone()).ok();
                         clear_output::spawn_after(3000u64.millis(), pin).ok();
                     }
@@ -531,13 +520,27 @@ mod app {
         #[cfg(feature = "ioe0")]
         {
             let set_output::SharedResources { ioe0, output, .. } = cx.shared;
-            let mut buf = [0u8; 100];
-
             (ioe0, output).lock(|ioe0_a, output_a| {
                 let ioe0 = ioe0_a.as_ref().unwrap();
                 let pin_bits = pin.clone() as u32;
                 let chip = ((pin_bits & 0xFF00) >> 8) as usize;
-                let out = output_a[chip] | 1u16 << ((pin_bits & 0xFF) as u8);
+                let out = output_a[chip] | (1u16 << ((pin_bits & 0xFF) as u8));
+                output_a[chip] = out;
+                ioe0.0.lock(|drv| drv.write_u16(chip as u8, out).ok());
+            });
+        }
+    }
+
+    #[task(priority = 1, capacity = 4, shared = [ioe0, output])]
+    fn toggle_output(cx: toggle_output::Context, pin: MyPin) {
+        #[cfg(feature = "ioe0")]
+        {
+            let toggle_output::SharedResources { ioe0, output, .. } = cx.shared;
+            (ioe0, output).lock(|ioe0_a, output_a| {
+                let ioe0 = ioe0_a.as_ref().unwrap();
+                let pin_bits = pin.clone() as u32;
+                let chip = ((pin_bits & 0xFF00) >> 8) as usize;
+                let out = output_a[chip] ^ (1u16 << ((pin_bits & 0xFF) as u8));
                 output_a[chip] = out;
                 ioe0.0.lock(|drv| drv.write_u16(chip as u8, out).ok());
             });
@@ -549,13 +552,11 @@ mod app {
         #[cfg(feature = "ioe0")]
         {
             let clear_output::SharedResources { ioe0, output, .. } = cx.shared;
-            let mut buf = [0u8; 100];
-
             (ioe0, output).lock(|ioe0_a, output_a| {
                 let ioe0 = ioe0_a.as_ref().unwrap();
                 let pin_bits = pin.clone() as u32;
                 let chip = ((pin_bits & 0xFF00) >> 8) as usize;
-                let out = output_a[chip] & ((1u16 << ((pin_bits & 0xFF) as u8)) ^ 0xFFFFu16);
+                let out = output_a[chip] & (!(1u16 << ((pin_bits & 0xFF) as u8)));
                 output_a[chip] = out;
                 ioe0.0.lock(|drv| drv.write_u16(chip as u8, out).ok());
             });
@@ -658,11 +659,12 @@ mod app {
                     OutTestState::Test1 => &OUT_TEST1,
                     OutTestState::Test2 => &OUT_TEST2,
                     OutTestState::Test3 => &OUT_TEST3,
-                    OutTestState::Test4 => &OUT_TEST3,
+                    OutTestState::Test4 => &OUT_TEST4,
                 };
                 match *tstate_a {
                     OutTestState::Idle => {
                         active = false;
+                        rand_output::spawn_after(3000u64.millis()).ok();
                     }
                     OutTestState::Test1 => {
                         *tstate_a = OutTestState::Test2;
@@ -678,7 +680,7 @@ mod app {
                     }
                     OutTestState::Test4 => {
                         *tstate_a = OutTestState::Idle;
-                        // out_zero::spawn_after(2900u64.millis()).ok();
+                        out_zero::spawn_after(2900u64.millis()).ok();
                     }
                 }
 
@@ -696,8 +698,29 @@ mod app {
         }
     }
 
+    #[task(priority = 1, shared = [rng])]
+    fn rand_output(cx: rand_output::Context) {
+        let rand_output::SharedResources { rng, .. } = cx.shared;
+        (rng,).lock(|rng_a| {
+            if rng_a.is_none() {
+                *rng_a = Some(StdRng::seed_from_u64(monotonics::now().ticks()));
+            }
+
+            let mut r: [u8; 2] = [0; 2];
+            rng_a.as_mut().unwrap().fill_bytes(&mut r);
+            let rpin = pin_input_ident(r[0] & 0x07, r[1] & 0x0F);
+            match rpin {
+                MyPin::UnknownPin => {}
+                p => {
+                    toggle_output::spawn(p).ok();
+                }
+            }
+        });
+        rand_output::spawn_after(50u64.millis()).ok();
+    }
+
     #[task(priority = 2)]
-    fn io_noirq(cx: io_noirq::Context) {
+    fn io_noirq(_cx: io_noirq::Context) {
         #[cfg(feature = "ioe1")]
         io_poll::spawn().ok();
 
