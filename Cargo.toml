@@ -8,7 +8,17 @@ resolver = "2"
 
 
 [features]
-default = ["ioe0", "ioe1", "io_report", "input_id", "test_output"]
+default = [
+    "io_irq",
+    "ioe0",
+    "ioe1",
+    "test_output",
+    "io_report",
+    "input_id",
+    "in_to_out",
+]
+io_irq = []
+io_noirq = []
 ioe0 = []
 ioe1 = []
 io_report = []
